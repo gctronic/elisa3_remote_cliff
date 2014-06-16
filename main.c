@@ -92,7 +92,12 @@ int main(void) {
             resetTxFlag(robotAddress);
             while(messageIsSent(robotAddress)==0);
 
+			#ifdef _WIN32
             Sleep(500);
+			#endif
+			#if defined(__linux__) || defined(__APPLE__)
+			usleep(500000);
+			#endif
 
             robLSpeed = 0;
             robRSpeed = 0;
@@ -111,7 +116,12 @@ int main(void) {
                     resetTxFlag(robotAddress);
                     while(messageIsSent(robotAddress)==0);
 					prevRot = LEFT_ROT;
-                    Sleep(250);
+					#ifdef _WIN32
+            		Sleep(250);
+					#endif
+					#if defined(__linux__) || defined(__APPLE__)
+					usleep(250000);
+					#endif
 					break;
 
 				case GROUND_CENTER_RIGHT:	// center sensor, continue same rotation
@@ -123,7 +133,12 @@ int main(void) {
                         setRightSpeed(robotAddress, robRSpeed);
                         resetTxFlag(robotAddress);
                         while(messageIsSent(robotAddress)==0);
-                        Sleep(250);
+						#ifdef _WIN32
+            			Sleep(250);
+						#endif
+						#if defined(__linux__) || defined(__APPLE__)
+						usleep(250000);
+						#endif
 					} else if(prevRot == RIGHT_ROT) {
                         robRSpeed = -20;
                         robLSpeed = 20;
@@ -131,7 +146,12 @@ int main(void) {
                         setRightSpeed(robotAddress, robRSpeed);
                         resetTxFlag(robotAddress);
                         while(messageIsSent(robotAddress)==0);
-                        Sleep(250);
+						#ifdef _WIN32
+            			Sleep(250);
+						#endif
+						#if defined(__linux__) || defined(__APPLE__)
+						usleep(250000);
+						#endif
 					} else {	// turn right by default
                         robRSpeed = -20;
                         robLSpeed = 20;
@@ -139,7 +159,12 @@ int main(void) {
                         setRightSpeed(robotAddress, robRSpeed);
                         resetTxFlag(robotAddress);
                         while(messageIsSent(robotAddress)==0);
-                        Sleep(250);
+						#ifdef _WIN32
+            			Sleep(250);
+						#endif
+						#if defined(__linux__) || defined(__APPLE__)
+						usleep(250000);
+						#endif
 						prevRot = RIGHT_ROT;
 					}
 					break;
@@ -151,7 +176,12 @@ int main(void) {
                     setRightSpeed(robotAddress, robRSpeed);
                     resetTxFlag(robotAddress);
                     while(messageIsSent(robotAddress)==0);
-                    Sleep(250);
+					#ifdef _WIN32
+            		Sleep(250);
+					#endif
+					#if defined(__linux__) || defined(__APPLE__)
+					usleep(250000);
+					#endif
 					break;
 
 			}
