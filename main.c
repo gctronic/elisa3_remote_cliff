@@ -2,7 +2,6 @@
 #include <sys/types.h>
 #include <time.h>
 #include "elisa3-lib.h"
-
 #ifdef _WIN32
     #include "windows.h"
 #endif
@@ -15,184 +14,171 @@
 #define GROUND_CENTER_LEFT 2
 #define GROUND_LEFT 3
 
-// received from robot
-int robotAddress;
-unsigned int robGround[8] = {0};
+int robotAddress[1];
 
-// sent to robot
-char robLSpeed=0, robRSpeed=0;
-char robRedLed=0, robGreenLed=0, robBlueLed=0;
+unsigned char updateRGB(char *red, char *green, char *blue) {
+    static unsigned int i=0;
+    unsigned int rndNum;
 
-// various
-unsigned int i;
-unsigned int minGroundValue = 0;
-unsigned int minGround = GROUND_LEFT;
-unsigned char prevRot = 0;
+    i = (i+1)%65000;  // use to change the rgb leds
+    if(i==0) {
+        rndNum = rand()%400;
+        if(rndNum < 100) {
+            *red = rand()%100;
+            *green = rand()%100;
+            *blue = 0;
+        } else if(rndNum < 200) {
+            *red = rand()%100;
+            *green = 0;
+            *blue = rand()%100;
+        } else if(rndNum < 300) {
+            *red = 0;
+            *green = rand()%100;
+            *blue = rand()%100;
+        } else {
+            *red = rand()%100;
+            *green = rand()%100;
+            *blue = rand()%100;
+        }
+        return 1;
+    }
+    return 0;
+}
+
+void stopAndComeBack() {
+
+    setLeftSpeed(robotAddress[0], 0);
+    setRightSpeed(robotAddress[0], 0);
+    waitForUpdate(robotAddress[0], 100000); // wait for at most 100 ms
+
+    setLeftSpeed(robotAddress[0], -20);
+    setRightSpeed(robotAddress[0], -20);
+    waitForUpdate(robotAddress[0], 100000); // wait for at most 100 ms
+    #ifdef _WIN32
+    Sleep(500);
+	#endif
+	#if defined(__linux__) || defined(__APPLE__)
+	usleep(500000);
+	#endif
+
+    setLeftSpeed(robotAddress[0], 0);
+    setRightSpeed(robotAddress[0], 0);
+    waitForUpdate(robotAddress[0], 100000); // wait for at most 100 ms
+
+}
+
+void turnLeft() {
+    setLeftSpeed(robotAddress[0], -20);
+    setRightSpeed(robotAddress[0], 20);
+    waitForUpdate(robotAddress[0], 100000); // wait for at most 100 ms
+    #ifdef _WIN32
+    Sleep(250);
+	#endif
+	#if defined(__linux__) || defined(__APPLE__)
+	usleep(250000);
+	#endif
+}
+
+void turnRight() {
+    setLeftSpeed(robotAddress[0], 20);
+    setRightSpeed(robotAddress[0], -20);
+    waitForUpdate(robotAddress[0], 100000); // wait for at most 100 ms
+	#ifdef _WIN32
+    Sleep(250);
+	#endif
+    #if defined(__linux__) || defined(__APPLE__)
+	usleep(250000);
+	#endif
+}
+
+void goAhead() {
+    setLeftSpeed(robotAddress[0], 30);
+    setRightSpeed(robotAddress[0], 30);
+    waitForUpdate(robotAddress[0], 100000); // wait for at most 100 ms
+}
+
+void avoidCliff(unsigned int *ground) {
+    unsigned int minGroundValue = 0;
+    unsigned int minGround = GROUND_LEFT;
+    unsigned char prevRot = 0;
+
+    // check for the ground with minimum value
+    minGroundValue = ground[0];
+	minGround = GROUND_LEFT;
+	if(ground[1] < minGroundValue) {
+        minGroundValue = ground[1];
+		minGround = GROUND_CENTER_LEFT;
+    }
+	if(ground[2] < minGroundValue) {
+		minGroundValue = ground[2];
+		minGround = GROUND_CENTER_RIGHT;
+	}
+	if(ground[3] < minGroundValue) {
+		minGroundValue = ground[3];
+		minGround = GROUND_RIGHT;
+	}
+
+    // enable cliff avoidance only under a certain threshold
+    if(minGroundValue <= CLIFF_THR) {
+
+        stopAndComeBack();
+
+        switch(minGround) {
+
+            case GROUND_RIGHT:	// turn left
+                turnLeft();
+                prevRot = LEFT_ROT;
+                break;
+
+            case GROUND_CENTER_RIGHT:	// center sensor, continue same rotation
+			case GROUND_CENTER_LEFT:
+                if(prevRot == LEFT_ROT) {
+                    turnLeft();
+                } else if(prevRot == RIGHT_ROT) {
+                    turnRight();
+                } else {	// turn right by default
+                    turnRight();
+                    prevRot = RIGHT_ROT;
+                }
+                break;
+
+            case GROUND_LEFT: // turn right
+                turnRight();
+                prevRot = RIGHT_ROT;
+                break;
+
+        }
+
+        goAhead();
+
+    }
+}
 
 int main(void) {
 
-    srand ( time(NULL) );
+    // received from robot
+    unsigned int robGround[8] = {0};
+    // sent to robot
+    char robRedLed=0, robGreenLed=0, robBlueLed=0;
+
+    srand (time(NULL));
 
     printf("\r\nInsert the robot address: ");
-    scanf("%d", &robotAddress);
+    scanf("%d", &robotAddress[0]);
 
-    // init the communication with the RF module and thus with the robot
-    openRobotComm();
-
-    // set the address of the robot to control; if more robots (max of 4 per packet) need to be controlled
-    // the function need to be called more times with different ids (0..3) and addresses
-    setRobotAddress(0, robotAddress);
-
-    resetFlagTX(robotAddress);  // no onboard obstacle avoidance
-
-    i=0;
+    // init the communication with the robots; set the addresses and number of the robots to control
+    startCommunication(robotAddress, 1);
 
     while(1) {
 
-        i = (i+1)%100;  // use to change the rgb leds
-        if(i==0) {
-            robRedLed= rand()%100;
-            robGreenLed = rand()%100;
-            robBlueLed = rand()%100;
-        }
-        setRed(robotAddress, robRedLed);
-        setGreen(robotAddress, robGreenLed);
-        setBlue(robotAddress, robBlueLed);
+        getAllGround(robotAddress[0], robGround);
 
-        getAllGround(robotAddress, robGround);
+        avoidCliff(robGround);
 
-		minGroundValue = robGround[0];
-		minGround = GROUND_LEFT;
-		if(robGround[1] < minGroundValue) {
-			minGroundValue = robGround[1];
-			minGround = GROUND_CENTER_LEFT;
-		}
-		if(robGround[2] < minGroundValue) {
-			minGroundValue = robGround[2];
-			minGround = GROUND_CENTER_RIGHT;
-		}
-		if(robGround[3] < minGroundValue) {
-			minGroundValue = robGround[3];
-			minGround = GROUND_RIGHT;
-		}
-
-        if(minGroundValue <= CLIFF_THR) {
-
-            robLSpeed = 0;
-            robRSpeed = 0;
-            setLeftSpeed(robotAddress, robLSpeed);  // modify the packet to send to the robot
-            setRightSpeed(robotAddress, robRSpeed);
-            resetTxFlag(robotAddress);              // reset the flag indicating the transmission is completed
-            while(messageIsSent(robotAddress)==0);  // wait for the message to be sent to the robot
-
-            robLSpeed = -20;
-            robRSpeed = -20;
-            setLeftSpeed(robotAddress, robLSpeed);
-            setRightSpeed(robotAddress, robRSpeed);
-            resetTxFlag(robotAddress);
-            while(messageIsSent(robotAddress)==0);
-
-			#ifdef _WIN32
-            Sleep(500);
-			#endif
-			#if defined(__linux__) || defined(__APPLE__)
-			usleep(500000);
-			#endif
-
-            robLSpeed = 0;
-            robRSpeed = 0;
-            setLeftSpeed(robotAddress, robLSpeed);
-            setRightSpeed(robotAddress, robRSpeed);
-            resetTxFlag(robotAddress);
-            while(messageIsSent(robotAddress)==0);
-
-			switch(minGround) {
-
-				case GROUND_RIGHT:	// turn left
-                    robLSpeed = -20;
-                    robRSpeed = 20;
-                    setLeftSpeed(robotAddress, robLSpeed);
-                    setRightSpeed(robotAddress, robRSpeed);
-                    resetTxFlag(robotAddress);
-                    while(messageIsSent(robotAddress)==0);
-					prevRot = LEFT_ROT;
-					#ifdef _WIN32
-            		Sleep(250);
-					#endif
-					#if defined(__linux__) || defined(__APPLE__)
-					usleep(250000);
-					#endif
-					break;
-
-				case GROUND_CENTER_RIGHT:	// center sensor, continue same rotation
-				case GROUND_CENTER_LEFT:
-					if(prevRot == LEFT_ROT) {
-                        robLSpeed = -20;
-                        robRSpeed = 20;
-                        setLeftSpeed(robotAddress, robLSpeed);
-                        setRightSpeed(robotAddress, robRSpeed);
-                        resetTxFlag(robotAddress);
-                        while(messageIsSent(robotAddress)==0);
-						#ifdef _WIN32
-            			Sleep(250);
-						#endif
-						#if defined(__linux__) || defined(__APPLE__)
-						usleep(250000);
-						#endif
-					} else if(prevRot == RIGHT_ROT) {
-                        robRSpeed = -20;
-                        robLSpeed = 20;
-                        setLeftSpeed(robotAddress, robLSpeed);
-                        setRightSpeed(robotAddress, robRSpeed);
-                        resetTxFlag(robotAddress);
-                        while(messageIsSent(robotAddress)==0);
-						#ifdef _WIN32
-            			Sleep(250);
-						#endif
-						#if defined(__linux__) || defined(__APPLE__)
-						usleep(250000);
-						#endif
-					} else {	// turn right by default
-                        robRSpeed = -20;
-                        robLSpeed = 20;
-                        setLeftSpeed(robotAddress, robLSpeed);
-                        setRightSpeed(robotAddress, robRSpeed);
-                        resetTxFlag(robotAddress);
-                        while(messageIsSent(robotAddress)==0);
-						#ifdef _WIN32
-            			Sleep(250);
-						#endif
-						#if defined(__linux__) || defined(__APPLE__)
-						usleep(250000);
-						#endif
-						prevRot = RIGHT_ROT;
-					}
-					break;
-
-				case GROUND_LEFT: // turn right
-                    robRSpeed = -20;
-                    robLSpeed = 20;
-                    setLeftSpeed(robotAddress, robLSpeed);
-                    setRightSpeed(robotAddress, robRSpeed);
-                    resetTxFlag(robotAddress);
-                    while(messageIsSent(robotAddress)==0);
-					#ifdef _WIN32
-            		Sleep(250);
-					#endif
-					#if defined(__linux__) || defined(__APPLE__)
-					usleep(250000);
-					#endif
-					break;
-
-			}
-
-			robLSpeed = 30;
-			robRSpeed = 30;
-            setLeftSpeed(robotAddress, robLSpeed);
-            setRightSpeed(robotAddress, robRSpeed);
-            resetTxFlag(robotAddress);
-            while(messageIsSent(robotAddress)==0);
-
+        if(updateRGB(&robRedLed, &robGreenLed, &robBlueLed)) {
+            setRed(robotAddress[0], robRedLed);
+            setGreen(robotAddress[0], robGreenLed);
+            setBlue(robotAddress[0], robBlueLed);
         }
 
     }
